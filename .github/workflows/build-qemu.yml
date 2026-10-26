@@ -16,6 +16,8 @@ jobs:
       GLIB_SERIES: "2.80"
       PIXMAN_VER: "0.43.4"
       API: "28"
+      # only look for libraries in our own Android folder, never the build machine's (x86) ones
+      PKG_CONFIG_LIBDIR: "${{ github.workspace }}/deps/lib/pkgconfig:${{ github.workspace }}/deps/lib64/pkgconfig"
     steps:
       - name: Android NDK
         id: ndk
