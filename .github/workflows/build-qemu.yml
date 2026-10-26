@@ -43,6 +43,7 @@ jobs:
           w gcc "$TC/aarch64-linux-android${API}-clang"; w cc "$TC/aarch64-linux-android${API}-clang"; w g++ "$TC/aarch64-linux-android${API}-clang++"
           w ar "$TC/llvm-ar"; w ranlib "$TC/llvm-ranlib"; w nm "$TC/llvm-nm"; w strip "$TC/llvm-strip"; w objcopy "$TC/llvm-objcopy"; w ld "$TC/ld.lld"
           w windres "true"
+          w pkg-config "pkg-config"
           cat > "$GITHUB_WORKSPACE/cross.txt" <<EOF
           [binaries]
           c = '$TC/aarch64-linux-android${API}-clang'
@@ -87,7 +88,7 @@ jobs:
 
       - name: Build QEMU
         run: |
-          set -eux
+          set -euxo pipefail
           cd "$RUNNER_TEMP"
           curl -fLO "https://download.qemu.org/qemu-${QEMU_VER}.tar.xz"
           tar xf "qemu-${QEMU_VER}.tar.xz"; cd "qemu-${QEMU_VER}"
