@@ -15,7 +15,7 @@ jobs:
       GLIB_VER: "2.80.5"
       GLIB_SERIES: "2.80"
       PIXMAN_VER: "0.43.4"
-      API: "26"
+      API: "28"
     steps:
       - name: Android NDK
         id: ndk
