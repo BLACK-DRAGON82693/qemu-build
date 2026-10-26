@@ -96,7 +96,7 @@ jobs:
           export PKG_CONFIG_LIBDIR="$PREFIX/lib/pkgconfig:$PREFIX/lib64/pkgconfig"
           mkdir build; cd build
           ../configure --cross-prefix="aarch64-linux-android${API}-" --target-list=aarch64-softmmu \
-            --without-default-features --enable-tcg --enable-kvm --enable-slirp --enable-vnc --enable-tpm \
+            --without-default-features --enable-tcg --enable-kvm --enable-slirp --enable-pixman --enable-vnc --enable-tpm \
             --disable-docs --disable-tools --disable-guest-agent --disable-werror --disable-install-blobs \
             --extra-cflags="-I$PREFIX/include -fPIE" --extra-ldflags="-pie -L$PREFIX/lib -lpcre2-8 -lffi -lintl" 2>&1 | tee "$GITHUB_WORKSPACE/configure.log"
           ninja qemu-system-aarch64 2>&1 | tee "$GITHUB_WORKSPACE/build.log"
