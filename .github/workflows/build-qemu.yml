@@ -92,14 +92,24 @@ jobs:
           cd "$RUNNER_TEMP"
           curl -fLO "https://download.qemu.org/qemu-${QEMU_VER}.tar.xz"
           tar xf "qemu-${QEMU_VER}.tar.xz"; cd "qemu-${QEMU_VER}"
+          # Android has no shm_open / shm_unlink (shared-memory files). QEMU only needs them for optional features, so these do-nothing versions are enough.
+          cat > "$GITHUB_WORKSPACE/shim/shm_compat.h" <<'EOT'
+          #pragma once
+          #include <errno.h>
+          #include <sys/types.h>
+          #include <sys/stat.h>
+          static inline int shm_open(const char *n, int f, mode_t m) { (void)n; (void)f; (void)m; errno = ENOSYS; return -1; }
+          static inline int shm_unlink(const char *n) { (void)n; errno = ENOSYS; return -1; }
+          EOT
           export PATH="$GITHUB_WORKSPACE/shim:$PATH"
           export PKG_CONFIG_LIBDIR="$PREFIX/lib/pkgconfig:$PREFIX/lib64/pkgconfig"
           mkdir build; cd build
           ../configure --cross-prefix="aarch64-linux-android${API}-" --target-list=aarch64-softmmu \
             --without-default-features --enable-tcg --enable-kvm --enable-slirp --enable-pixman --enable-vnc --enable-tpm \
             --disable-docs --disable-tools --disable-guest-agent --disable-werror --disable-install-blobs \
-            --extra-cflags="-I$PREFIX/include -fPIE" --extra-ldflags="-pie -L$PREFIX/lib -lpcre2-8 -lffi -lintl" 2>&1 | tee "$GITHUB_WORKSPACE/configure.log"
-          ninja qemu-system-aarch64 2>&1 | tee "$GITHUB_WORKSPACE/build.log"
+            --extra-cflags="-I$PREFIX/include -fPIE -include $GITHUB_WORKSPACE/shim/shm_compat.h" --extra-ldflags="-pie -L$PREFIX/lib -lpcre2-8 -lffi -lintl" 2>&1 | tee "$GITHUB_WORKSPACE/configure.log"
+          # keep going after an error so one run shows every problem, then print them all together at the end
+          ninja -k 0 qemu-system-aarch64 2>&1 | tee "$GITHUB_WORKSPACE/build.log" || { echo "=================== ALL ERRORS ==================="; grep -E "error:|FAILED:|undefined" "$GITHUB_WORKSPACE/build.log" | head -80; exit 1; }
           mkdir -p "$GITHUB_WORKSPACE/out"
           "$TC/llvm-strip" -o "$GITHUB_WORKSPACE/out/libqemu.so" qemu-system-aarch64
           cp config.log "$GITHUB_WORKSPACE/config.log" || true
