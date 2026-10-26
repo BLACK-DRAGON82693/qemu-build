@@ -130,6 +130,10 @@ jobs:
           set -eux
           cd "$RUNNER_TEMP/qemu-${QEMU_VER}"
           bunzip2 -kc pc-bios/edk2-aarch64-code.fd.bz2 > "$GITHUB_WORKSPACE/out/edk2-aarch64-code.fd"
+          # small support files QEMU looks for (screen and network card ROMs)
+          mkdir -p "$GITHUB_WORKSPACE/out/qemu-bios"
+          cp pc-bios/efi-*.rom pc-bios/vgabios*.bin "$GITHUB_WORKSPACE/out/qemu-bios/"
+          ls -la "$GITHUB_WORKSPACE/out/qemu-bios"
 
       - name: Save the results
         if: always()
@@ -140,6 +144,7 @@ jobs:
           path: |
             out/libqemu.so
             out/edk2-aarch64-code.fd
+            out/qemu-bios
             configure.log
             build.log
             config.log
