@@ -133,6 +133,13 @@ jobs:
           # small support files QEMU looks for (screen and network card ROMs)
           mkdir -p "$GITHUB_WORKSPACE/out/qemu-bios"
           cp pc-bios/efi-*.rom pc-bios/vgabios*.bin "$GITHUB_WORKSPACE/out/qemu-bios/"
+          # the keyboard layout file the screen server needs (made during the build)
+          (cd build && ninja pc-bios/keymaps/en-us) || true
+          mkdir -p "$GITHUB_WORKSPACE/out/qemu-bios/keymaps"
+          K=$(find . -path '*keymaps*' -name en-us -type f | head -1)
+          echo "keymap found at: $K"
+          cp "$K" "$GITHUB_WORKSPACE/out/qemu-bios/keymaps/en-us"
+          find "$GITHUB_WORKSPACE/out/qemu-bios" -type f
           ls -la "$GITHUB_WORKSPACE/out/qemu-bios"
 
       - name: Save the results
