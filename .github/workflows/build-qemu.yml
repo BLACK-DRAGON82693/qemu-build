@@ -95,6 +95,71 @@ jobs:
           meson setup build --cross-file "$GITHUB_WORKSPACE/cross.txt" --prefix "$PREFIX" --libdir lib --default-library static
           ninja -C build install
 
+      - name: Task switching that works with pointer authentication (fixes the crash found in the crash report)
+        run: |
+          set -euxo pipefail
+          # Android's own setjmp/longjmp crashes on phones that sign return addresses. These versions just save and restore the registers.
+          cat > "$GITHUB_WORKSPACE/shim/ff_jmp.h" <<'EOT'
+          #pragma once
+          #include <setjmp.h>
+          typedef struct { unsigned long long r[24]; } ff_jmp_buf;
+          int ff_setjmp(ff_jmp_buf *b) __attribute__((returns_twice));
+          void ff_longjmp(ff_jmp_buf *b, int v) __attribute__((noreturn));
+          #undef sigjmp_buf
+          #undef sigsetjmp
+          #undef siglongjmp
+          #define sigjmp_buf ff_jmp_buf
+          #define sigsetjmp(env, m) ff_setjmp(&(env))
+          #define siglongjmp(env, v) ff_longjmp(&(env), (v))
+          EOT
+          cat > "$RUNNER_TEMP/ffjmp.c" <<'EOT'
+          __asm__(
+          ".text\n"
+          ".global ff_setjmp\n"
+          ".type ff_setjmp,%function\n"
+          ".p2align 4\n"
+          "ff_setjmp:\n"
+          "  stp x19, x20, [x0, #0]\n"
+          "  stp x21, x22, [x0, #16]\n"
+          "  stp x23, x24, [x0, #32]\n"
+          "  stp x25, x26, [x0, #48]\n"
+          "  stp x27, x28, [x0, #64]\n"
+          "  stp x29, x30, [x0, #80]\n"
+          "  mov x2, sp\n"
+          "  str x2, [x0, #96]\n"
+          "  stp d8, d9, [x0, #104]\n"
+          "  stp d10, d11, [x0, #120]\n"
+          "  stp d12, d13, [x0, #136]\n"
+          "  stp d14, d15, [x0, #152]\n"
+          "  mov w0, #0\n"
+          "  ret\n"
+          ".size ff_setjmp, .-ff_setjmp\n"
+          ".global ff_longjmp\n"
+          ".type ff_longjmp,%function\n"
+          ".p2align 4\n"
+          "ff_longjmp:\n"
+          "  ldp x19, x20, [x0, #0]\n"
+          "  ldp x21, x22, [x0, #16]\n"
+          "  ldp x23, x24, [x0, #32]\n"
+          "  ldp x25, x26, [x0, #48]\n"
+          "  ldp x27, x28, [x0, #64]\n"
+          "  ldp x29, x30, [x0, #80]\n"
+          "  ldr x2, [x0, #96]\n"
+          "  mov sp, x2\n"
+          "  ldp d8, d9, [x0, #104]\n"
+          "  ldp d10, d11, [x0, #120]\n"
+          "  ldp d12, d13, [x0, #136]\n"
+          "  ldp d14, d15, [x0, #152]\n"
+          "  cmp w1, #0\n"
+          "  csinc w0, w1, wzr, ne\n"
+          "  ret\n"
+          ".size ff_longjmp, .-ff_longjmp\n"
+          );
+          EOT
+          "$TC/aarch64-linux-android${API}-clang" -c -O2 -fPIC -o "$RUNNER_TEMP/ffjmp.o" "$RUNNER_TEMP/ffjmp.c"
+          "$TC/llvm-ar" rcs "$PREFIX/lib/libffjmp.a" "$RUNNER_TEMP/ffjmp.o"
+          "$TC/llvm-objdump" -d "$RUNNER_TEMP/ffjmp.o" | head -50
+
       - name: Build QEMU
         run: |
           set -euxo pipefail
@@ -116,7 +181,7 @@ jobs:
           ../configure --cross-prefix="aarch64-linux-android${API}-" --target-list=aarch64-softmmu \
             --without-default-features --enable-tcg --enable-kvm --enable-slirp --enable-pixman --enable-vnc --enable-tpm \
             --disable-docs --disable-tools --disable-guest-agent --disable-werror --disable-install-blobs \
-            --extra-cflags="-I$PREFIX/include -fPIE -include $GITHUB_WORKSPACE/shim/shm_compat.h" --extra-ldflags="-pie -Wl,-z,max-page-size=16384 -L$PREFIX/lib -lpcre2-8 -lffi -lintl" 2>&1 | tee "$GITHUB_WORKSPACE/configure.log"
+            --extra-cflags="-I$PREFIX/include -fPIE -include $GITHUB_WORKSPACE/shim/shm_compat.h -include $GITHUB_WORKSPACE/shim/ff_jmp.h" --extra-ldflags="-pie -Wl,-z,max-page-size=16384 -L$PREFIX/lib -lpcre2-8 -lffi -lintl -lffjmp" 2>&1 | tee "$GITHUB_WORKSPACE/configure.log"
           # keep going after an error so one run shows every problem, then print them all together at the end
           ninja -k 0 qemu-system-aarch64 2>&1 | tee "$GITHUB_WORKSPACE/build.log" || { echo "=================== ALL ERRORS ==================="; grep -E "error:|FAILED:|undefined" "$GITHUB_WORKSPACE/build.log" | head -80; exit 1; }
           mkdir -p "$GITHUB_WORKSPACE/out"
