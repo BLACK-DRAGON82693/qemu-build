@@ -1,0 +1,90 @@
+status: success
+run: https://github.com/BLACK-DRAGON82693/qemu-build/actions/runs/41264950269
+
+=== merge step ===
+merge ok
+
+=== error lines in the build ===
+68:> Task :app:checkDebugDuplicateClasses
+
+=== last 80 lines of the build ===
+C/C++:         int itemSize = vt_sizeof_VkRenderingInfo(pRenderingInfo);
+C/C++:                                                  ^~~~~~~~~~~~~~
+C/C++: /home/runner/work/qemu-build/qemu-build/src/app/src/main/cpp/vortekrenderer/include/vortek_serializer.h:12540:62: note: passing argument to parameter 'val' here
+C/C++: static inline int vt_sizeof_VkRenderingInfo(VkRenderingInfo* val) {
+C/C++:                                                              ^
+C/C++: /home/runner/work/qemu-build/qemu-build/src/app/src/main/cpp/vortekrenderer/include/vortek_serializer.h:46203:38: warning: passing 'const VkRenderingInfo *' (aka 'const struct VkRenderingInfo *') to parameter of type 'VkRenderingInfo *' (aka 'struct VkRenderingInfo *') discards qualifiers [-Wincompatible-pointer-types-discards-qualifiers]
+C/C++:         vt_serialize_VkRenderingInfo(pRenderingInfo, outputBuffer + bufferOffset);
+C/C++:                                      ^~~~~~~~~~~~~~
+C/C++: /home/runner/work/qemu-build/qemu-build/src/app/src/main/cpp/vortekrenderer/include/vortek_serializer.h:12586:66: note: passing argument to parameter 'val' here
+C/C++: static inline void vt_serialize_VkRenderingInfo(VkRenderingInfo* val, char* outputBuffer) {
+C/C++:                                                                  ^
+C/C++: /home/runner/work/qemu-build/qemu-build/src/app/src/main/cpp/vortekrenderer/include/vortek_serializer.h:46226:60: warning: passing 'const VkRenderingInfo *' (aka 'const struct VkRenderingInfo *') to parameter of type 'VkRenderingInfo *' (aka 'struct VkRenderingInfo *') discards qualifiers [-Wincompatible-pointer-types-discards-qualifiers]
+C/C++:         if (pRenderingInfo) vt_unserialize_VkRenderingInfo(pRenderingInfo, inputBuffer + bufferOffset, memoryPool);
+C/C++:                                                            ^~~~~~~~~~~~~~
+C/C++: /home/runner/work/qemu-build/qemu-build/src/app/src/main/cpp/vortekrenderer/include/vortek_serializer.h:12675:68: note: passing argument to parameter 'val' here
+C/C++: static inline void vt_unserialize_VkRenderingInfo(VkRenderingInfo* val, char* inputBuffer, MemoryPool* memoryPool) {
+C/C++:                                                                    ^
+C/C++: /home/runner/work/qemu-build/qemu-build/src/app/src/main/cpp/vortekrenderer/include/vortek_serializer.h:46336:68: warning: passing 'const VkShaderModuleCreateInfo *' (aka 'const struct VkShaderModuleCreateInfo *') to parameter of type 'VkShaderModuleCreateInfo *' (aka 'struct VkShaderModuleCreateInfo *') discards qualifiers [-Wincompatible-pointer-types-discards-qualifiers]
+C/C++:     bufferSize += pCreateInfo ? vt_sizeof_VkShaderModuleCreateInfo(pCreateInfo) : 0;
+C/C++:                                                                    ^~~~~~~~~~~
+C/C++: /home/runner/work/qemu-build/qemu-build/src/app/src/main/cpp/vortekrenderer/include/vortek_serializer.h:1853:80: note: passing argument to parameter 'val' here
+C/C++: static inline int vt_sizeof_VkShaderModuleCreateInfo(VkShaderModuleCreateInfo* val) {
+C/C++:                                                                                ^
+C/C++: /home/runner/work/qemu-build/qemu-build/src/app/src/main/cpp/vortekrenderer/include/vortek_serializer.h:46353:59: warning: passing 'const VkShaderModuleCreateInfo *' (aka 'const struct VkShaderModuleCreateInfo *') to parameter of type 'VkShaderModuleCreateInfo *' (aka 'struct VkShaderModuleCreateInfo *') discards qualifiers [-Wincompatible-pointer-types-discards-qualifiers]
+C/C++:         int itemSize = vt_sizeof_VkShaderModuleCreateInfo(pCreateInfo);
+C/C++:                                                           ^~~~~~~~~~~
+C/C++: /home/runner/work/qemu-build/qemu-build/src/app/src/main/cpp/vortekrenderer/include/vortek_serializer.h:1853:80: note: passing argument to parameter 'val' here
+C/C++: static inline int vt_sizeof_VkShaderModuleCreateInfo(VkShaderModuleCreateInfo* val) {
+C/C++:                                                                                ^
+C/C++: /home/runner/work/qemu-build/qemu-build/src/app/src/main/cpp/vortekrenderer/include/vortek_serializer.h:46356:47: warning: passing 'const VkShaderModuleCreateInfo *' (aka 'const struct VkShaderModuleCreateInfo *') to parameter of type 'VkShaderModuleCreateInfo *' (aka 'struct VkShaderModuleCreateInfo *') discards qualifiers [-Wincompatible-pointer-types-discards-qualifiers]
+C/C++:         vt_serialize_VkShaderModuleCreateInfo(pCreateInfo, outputBuffer + bufferOffset);
+C/C++:                                               ^~~~~~~~~~~
+C/C++: /home/runner/work/qemu-build/qemu-build/src/app/src/main/cpp/vortekrenderer/include/vortek_serializer.h:1863:84: note: passing argument to parameter 'val' here
+C/C++: static inline void vt_serialize_VkShaderModuleCreateInfo(VkShaderModuleCreateInfo* val, char* outputBuffer) {
+C/C++:                                                                                    ^
+C/C++: /home/runner/work/qemu-build/qemu-build/src/app/src/main/cpp/vortekrenderer/include/vortek_serializer.h:46391:66: warning: passing 'const VkShaderModuleCreateInfo *' (aka 'const struct VkShaderModuleCreateInfo *') to parameter of type 'VkShaderModuleCreateInfo *' (aka 'struct VkShaderModuleCreateInfo *') discards qualifiers [-Wincompatible-pointer-types-discards-qualifiers]
+C/C++:         if (pCreateInfo) vt_unserialize_VkShaderModuleCreateInfo(pCreateInfo, inputBuffer + bufferOffset, memoryPool);
+C/C++:                                                                  ^~~~~~~~~~~
+C/C++: /home/runner/work/qemu-build/qemu-build/src/app/src/main/cpp/vortekrenderer/include/vortek_serializer.h:1877:86: note: passing argument to parameter 'val' here
+C/C++: static inline void vt_unserialize_VkShaderModuleCreateInfo(VkShaderModuleCreateInfo* val, char* inputBuffer, MemoryPool* memoryPool) {
+C/C++:                                                                                      ^
+C/C++: /home/runner/work/qemu-build/qemu-build/src/app/src/main/cpp/vortekrenderer/src/request_handler.c:2002:23: warning: initializing 'VkPresentModeKHR *' (aka 'enum VkPresentModeKHR *') with an expression of type 'const VkPresentModeKHR *' (aka 'const enum VkPresentModeKHR *') discards qualifiers [-Wincompatible-pointer-types-discards-qualifiers]
+C/C++:     VkPresentModeKHR* presentModes = presentModeCount > 0 ? supportedPresentModes : NULL;
+C/C++:                       ^              ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+C/C++: 904 warnings generated.
+
+> Task :app:compileDebugJavaWithJavac
+Note: Some input files use or override a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+Note: Some input files use unchecked or unsafe operations.
+Note: Recompile with -Xlint:unchecked for details.
+
+> Task :app:dexBuilderDebug
+> Task :app:mergeDebugGlobalSynthetics
+> Task :app:processDebugJavaRes
+> Task :app:mergeDebugJniLibFolders
+> Task :app:mergeDebugNativeLibs
+> Task :app:mergeProjectDexDebug
+> Task :app:mergeDebugJavaResource
+> Task :app:validateSigningDebug
+> Task :app:writeDebugAppMetadata
+> Task :app:writeDebugSigningConfigVersions
+> Task :app:stripDebugDebugSymbols
+
+> Task :app:packageDebug
+PackagingOptions.jniLibs.useLegacyPackaging should be set to true because android:extractNativeLibs is set to "true" in AndroidManifest.xml.
+
+> Task :app:createDebugApkListingFileRedirect
+> Task :app:assembleDebug
+
+[Incubating] Problems report is available at: file:///home/runner/work/qemu-build/qemu-build/src/build/reports/problems/problems-report.html
+
+Deprecated Gradle features were used in this build, making it incompatible with Gradle 9.0.
+
+You can use '--warning-mode all' to show the individual deprecation warnings and determine if they come from your own scripts or plugins.
+
+For more on this, please refer to https://docs.gradle.org/8.14.5/userguide/command_line_interface.html#sec:command_line_warnings in the Gradle documentation.
+
+BUILD SUCCESSFUL in 2m 40s
+37 actionable tasks: 37 executed
