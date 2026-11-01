@@ -1,292 +1,234 @@
-# Builds QEMU (aarch64 / Windows-on-ARM capable) for Android, and fetches the UEFI boot firmware.
-# Put this file in your GitHub repository at:  .github/workflows/build-qemu.yml
-# Then: Actions tab -> "Build QEMU for Android" -> Run workflow. When it finishes, download the "finite-qemu" artifact.
-# NOT TESTED. If a step fails, open it, copy the last ~40 lines of red text, and send them to Claude.
-name: Build QEMU for Android
+name: Build Finite Functions with Windows (one app)
 
-on: workflow_dispatch
+# Merges your Finite Functions project (FiniteFunctions.zip in this repo) into the official Winlator source (brunodev85/winlator-app),
+# builds ONE app, and publishes the APK as a Release. A short report is written to the branch "ci-log" -> ci/last-build.txt after every run.
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/build-finite-windows.yml'
+      - 'FiniteFunctions.zip'
+
+permissions:
+  contents: write
 
 jobs:
   build:
     runs-on: ubuntu-24.04
-    timeout-minutes: 180
-    env:
-      QEMU_VER: "9.2.0"
-      GLIB_VER: "2.80.5"
-      GLIB_SERIES: "2.80"
-      PIXMAN_VER: "0.43.4"
-      API: "28"
-      # only look for libraries in our own Android folder, never the build machine's (x86) ones
-      PKG_CONFIG_LIBDIR: "${{ github.workspace }}/deps/lib/pkgconfig:${{ github.workspace }}/deps/lib64/pkgconfig"
+    timeout-minutes: 120
     steps:
-      - name: Android NDK
-        id: ndk
-        uses: nttld/setup-ndk@v1
+      - name: Get this repository (it holds FiniteFunctions.zip)
+        uses: actions/checkout@v4
         with:
-          ndk-version: r26d
+          path: self
 
-      - name: Host tools
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y ninja-build python3-pip pkg-config flex bison bzip2 xz-utils curl libglib2.0-dev python3-venv git
-          pip install --break-system-packages meson
+      - name: Get the Winlator source
+        uses: actions/checkout@v4
+        with:
+          repository: brunodev85/winlator-app
+          submodules: recursive
+          path: src
 
-      - name: Set up paths and compiler wrappers
+      - name: Unpack Finite Functions
         run: |
-          set -eux
-          TC="${{ steps.ndk.outputs.ndk-path }}/toolchains/llvm/prebuilt/linux-x86_64/bin"
-          P="$GITHUB_WORKSPACE/deps"; mkdir -p "$P" "$GITHUB_WORKSPACE/shim"
-          echo "TC=$TC" >> $GITHUB_ENV; echo "PREFIX=$P" >> $GITHUB_ENV
-          # QEMU's configure wants tools named <prefix>gcc, <prefix>ar ... so each one is a tiny script that calls the NDK's version
-          pre="aarch64-linux-android${API}-"
-          w() { printf '#!/bin/sh\nexec %s "$@"\n' "$2" > "$GITHUB_WORKSPACE/shim/${pre}$1"; chmod +x "$GITHUB_WORKSPACE/shim/${pre}$1"; }
-          w gcc "$TC/aarch64-linux-android${API}-clang"; w cc "$TC/aarch64-linux-android${API}-clang"; w g++ "$TC/aarch64-linux-android${API}-clang++"
-          w ar "$TC/llvm-ar"; w ranlib "$TC/llvm-ranlib"; w nm "$TC/llvm-nm"; w strip "$TC/llvm-strip"; w objcopy "$TC/llvm-objcopy"; w ld "$TC/ld.lld"
-          w windres "true"
-          w pkg-config "pkg-config"
-          cat > "$GITHUB_WORKSPACE/cross.txt" <<EOF
-          [binaries]
-          c = '$TC/aarch64-linux-android${API}-clang'
-          cpp = '$TC/aarch64-linux-android${API}-clang++'
-          ar = '$TC/llvm-ar'
-          ranlib = '$TC/llvm-ranlib'
-          strip = '$TC/llvm-strip'
-          pkg-config = 'pkg-config'
-          [host_machine]
-          system = 'android'
-          cpu_family = 'aarch64'
-          cpu = 'armv8'
-          endian = 'little'
-          [built-in options]
-          c_args = ['-fPIC']
-          cpp_args = ['-fPIC']
-          pkg_config_path = ['$P/lib/pkgconfig', '$P/lib64/pkgconfig']
-          EOF
-          sed -i 's/^          //' "$GITHUB_WORKSPACE/cross.txt"
+          test -f self/FiniteFunctions.zip || { echo "FiniteFunctions.zip is missing from the repository"; exit 1; }
+          mkdir ff
+          unzip -q self/FiniteFunctions.zip -d ff
+          ls ff
 
-      - name: Build glib (QEMU's main library)
+      - name: Merge the two into one project
         run: |
-          set -eux
-          cd "$RUNNER_TEMP"
-          curl -fLO "https://download.gnome.org/sources/glib/${GLIB_SERIES}/glib-${GLIB_VER}.tar.xz"
-          tar xf "glib-${GLIB_VER}.tar.xz"; cd "glib-${GLIB_VER}"
-          meson setup build --cross-file "$GITHUB_WORKSPACE/cross.txt" --prefix "$PREFIX" --libdir lib --default-library static \
-            -Dtests=false -Dnls=disabled -Dlibmount=disabled -Dselinux=disabled -Dxattr=false -Dglib_debug=disabled \
-            -Dintrospection=disabled -Dman-pages=disabled -Dsysprof=disabled -Dlibelf=disabled \
-            --force-fallback-for=libffi,pcre2,proxy-libintl --wrap-mode=default
-          ninja -C build install
+          set -o pipefail
+          cat > merge_ff.py <<'PYEOF'
+          #!/usr/bin/env python3
+          # Merges Finite Functions into the Winlator app source so the result is ONE app:
+          #   - Finite Functions is the app you open (its launcher icon); Winlator's main screen is opened from FF's Tools tab.
+          #   - Everything keeps working as one package (Winlator's own files expect the package name com.winlator, so that stays).
+          import os, re, shutil, sys
 
-      - name: Build pixman (draws the screen)
-        run: |
-          set -eux
-          cd "$RUNNER_TEMP"
-          curl -fLO "https://cairographics.org/releases/pixman-${PIXMAN_VER}.tar.gz"
-          tar xf "pixman-${PIXMAN_VER}.tar.gz"; cd "pixman-${PIXMAN_VER}"
-          meson setup build --cross-file "$GITHUB_WORKSPACE/cross.txt" --prefix "$PREFIX" --libdir lib --default-library static \
-            -Dtests=disabled -Ddemos=disabled -Dgtk=disabled -Dlibpng=disabled -Dopenmp=disabled
-          ninja -C build install
+          SRC, FF = sys.argv[1], sys.argv[2]            # SRC = winlator-app checkout, FF = unzipped Finite Functions project
+          main, ffmain = f"{SRC}/app/src/main", f"{FF}/app/src/main"
 
-      - name: Build slirp (the phone-to-internet networking part), built into the engine so it needs no extra file
-        run: |
-          set -euxo pipefail
-          cd "$RUNNER_TEMP"
-          git clone --depth 1 --branch v4.7.0 https://gitlab.freedesktop.org/slirp/libslirp.git
-          cd libslirp
-          meson setup build --cross-file "$GITHUB_WORKSPACE/cross.txt" --prefix "$PREFIX" --libdir lib --default-library static
-          ninja -C build install
+          def rd(p):
+              with open(p, encoding="utf-8") as f: return f.read()
+          def wr(p, s):
+              os.makedirs(os.path.dirname(p), exist_ok=True)
+              with open(p, "w", encoding="utf-8") as f: f.write(s)
+          def must(cond, msg):
+              if not cond: sys.exit("MERGE ERROR: " + msg)
 
-      - name: Task switching that works with pointer authentication (fixes the crash found in the crash report)
-        run: |
-          set -euxo pipefail
-          # Android's own setjmp/longjmp crashes on phones that sign return addresses. These versions just save and restore the registers.
-          cat > "$GITHUB_WORKSPACE/shim/ff_jmp.h" <<'EOT'
-          #pragma once
-          #include <setjmp.h>
-          typedef struct { unsigned long long r[24]; } ff_jmp_buf;
-          int ff_setjmp(ff_jmp_buf *b) __attribute__((returns_twice));
-          void ff_longjmp(ff_jmp_buf *b, int v) __attribute__((noreturn));
-          #undef sigjmp_buf
-          #undef sigsetjmp
-          #undef siglongjmp
-          #define sigjmp_buf ff_jmp_buf
-          #define sigsetjmp(env, m) ff_setjmp(&(env))
-          #define siglongjmp(env, v) ff_longjmp(&(env), (v))
-          EOT
-          cat > "$RUNNER_TEMP/ffjmp.c" <<'EOT'
-          __asm__(
-          ".text\n"
-          ".global ff_setjmp\n"
-          ".type ff_setjmp,%function\n"
-          ".p2align 4\n"
-          "ff_setjmp:\n"
-          "  stp x19, x20, [x0, #0]\n"
-          "  stp x21, x22, [x0, #16]\n"
-          "  stp x23, x24, [x0, #32]\n"
-          "  stp x25, x26, [x0, #48]\n"
-          "  stp x27, x28, [x0, #64]\n"
-          "  stp x29, x30, [x0, #80]\n"
-          "  mov x2, sp\n"
-          "  str x2, [x0, #96]\n"
-          "  stp d8, d9, [x0, #104]\n"
-          "  stp d10, d11, [x0, #120]\n"
-          "  stp d12, d13, [x0, #136]\n"
-          "  stp d14, d15, [x0, #152]\n"
-          "  mov w0, #0\n"
-          "  ret\n"
-          ".size ff_setjmp, .-ff_setjmp\n"
-          ".global ff_longjmp\n"
-          ".type ff_longjmp,%function\n"
-          ".p2align 4\n"
-          "ff_longjmp:\n"
-          "  ldp x19, x20, [x0, #0]\n"
-          "  ldp x21, x22, [x0, #16]\n"
-          "  ldp x23, x24, [x0, #32]\n"
-          "  ldp x25, x26, [x0, #48]\n"
-          "  ldp x27, x28, [x0, #64]\n"
-          "  ldp x29, x30, [x0, #80]\n"
-          "  ldr x2, [x0, #96]\n"
-          "  mov sp, x2\n"
-          "  ldp d8, d9, [x0, #104]\n"
-          "  ldp d10, d11, [x0, #120]\n"
-          "  ldp d12, d13, [x0, #136]\n"
-          "  ldp d14, d15, [x0, #152]\n"
-          "  cmp w1, #0\n"
-          "  csinc w0, w1, wzr, ne\n"
-          "  ret\n"
-          ".size ff_longjmp, .-ff_longjmp\n"
-          );
-          EOT
-          "$TC/aarch64-linux-android${API}-clang" -c -O2 -fPIC -o "$RUNNER_TEMP/ffjmp.o" "$RUNNER_TEMP/ffjmp.c"
-          "$TC/llvm-ar" rcs "$PREFIX/lib/libffjmp.a" "$RUNNER_TEMP/ffjmp.o"
-          "$TC/llvm-objdump" -d "$RUNNER_TEMP/ffjmp.o" | head -50
+          # ---------- 1. Finite Functions' Kotlin code ----------
+          shutil.copytree(f"{ffmain}/java/com/finite", f"{main}/java/com/finite", dirs_exist_ok=True)
+          wr(f"{main}/java/com/finite/functions/FFFileProvider.kt", "package com.finite.functions\n\nclass FFFileProvider : androidx.core.content.FileProvider()\n")
+          kdir = f"{main}/java/com/finite/functions"
+          for name in sorted(os.listdir(kdir)):
+              if not name.endswith(".kt"): continue
+              p = f"{kdir}/{name}"; s = rd(p)
+              s = s.replace("R.layout.widget", "R.layout.ff_widget")
+              if re.search(r"(?<![\w.])R\.(style|layout|id|drawable|string|mipmap|xml|color)\b", s) and "import com.winlator.R" not in s:
+                  must("package com.finite.functions\n" in s, name + " has no package line")
+                  s = s.replace("package com.finite.functions\n", "package com.finite.functions\n\nimport com.winlator.R\n", 1)
+              wr(p, s)
 
-      - name: Build QEMU
-        run: |
-          set -euxo pipefail
-          cd "$RUNNER_TEMP"
-          curl -fLO "https://download.qemu.org/qemu-${QEMU_VER}.tar.xz"
-          tar xf "qemu-${QEMU_VER}.tar.xz"; cd "qemu-${QEMU_VER}"
-          # Android has no shm_open / shm_unlink (shared-memory files). QEMU only needs them for optional features, so these do-nothing versions are enough.
-          cat > "$GITHUB_WORKSPACE/shim/shm_compat.h" <<'EOT'
-          #pragma once
-          #include <errno.h>
-          #include <sys/types.h>
-          #include <sys/stat.h>
-          static inline int shm_open(const char *n, int f, mode_t m) { (void)n; (void)f; (void)m; errno = ENOSYS; return -1; }
-          static inline int shm_unlink(const char *n) { (void)n; errno = ENOSYS; return -1; }
-          EOT
-          export PATH="$GITHUB_WORKSPACE/shim:$PATH"
-          export PKG_CONFIG_LIBDIR="$PREFIX/lib/pkgconfig:$PREFIX/lib64/pkgconfig"
-          mkdir build; cd build
-          ../configure --cross-prefix="aarch64-linux-android${API}-" --target-list=aarch64-softmmu \
-            --without-default-features --enable-tcg --enable-kvm --enable-slirp --enable-pixman --enable-vnc --enable-tpm \
-            --disable-docs --disable-tools --disable-guest-agent --disable-werror --disable-install-blobs \
-            --extra-cflags="-I$PREFIX/include -fPIE -include $GITHUB_WORKSPACE/shim/shm_compat.h -include $GITHUB_WORKSPACE/shim/ff_jmp.h" --extra-ldflags="-pie -Wl,-z,max-page-size=16384 -L$PREFIX/lib -lpcre2-8 -lffi -lintl -lffjmp" 2>&1 | tee "$GITHUB_WORKSPACE/configure.log"
-          # keep going after an error so one run shows every problem, then print them all together at the end
-          ninja -k 0 qemu-system-aarch64 2>&1 | tee "$GITHUB_WORKSPACE/build.log" || { echo "=================== ALL ERRORS ==================="; grep -E "error:|FAILED:|undefined" "$GITHUB_WORKSPACE/build.log" | head -80; exit 1; }
-          mkdir -p "$GITHUB_WORKSPACE/out"
-          "$TC/llvm-strip" -o "$GITHUB_WORKSPACE/out/libqemu.so" qemu-system-aarch64
-          cp config.log "$GITHUB_WORKSPACE/config.log" || true
-          echo "=== Files the engine needs at run time (should only be Android system ones: libc, libm, libdl, liblog) ==="
-          "$TC/llvm-readelf" -d "$GITHUB_WORKSPACE/out/libqemu.so" | grep NEEDED
+          # the Windows apps card in the Tools tab opens Winlator's main screen (same app)
+          tp = f"{kdir}/Tools.kt"; t = rd(tp)
+          anchor = '      item { ToolCard("audio"'
+          must(anchor in t, "Tools.kt layout changed")
+          card = ('      item(span = { GridItemSpan(2) }) { val ctx = androidx.compose.ui.platform.LocalContext.current; '
+                  'MajorToolCard("grid", "Windows apps", "Run Windows programs and games") { '
+                  'ctx.startActivity(android.content.Intent().setClassName(ctx.packageName, "com.winlator.MainActivity")) } }\n')
+          t = t.replace(anchor, card + anchor, 1)
+          wr(tp, t)
 
-      - name: Boot firmware (UEFI for ARM, what lets Windows start)
-        run: |
-          set -eux
-          cd "$RUNNER_TEMP/qemu-${QEMU_VER}"
-          bunzip2 -kc pc-bios/edk2-aarch64-code.fd.bz2 > "$GITHUB_WORKSPACE/out/edk2-aarch64-code.fd"
-          # small support files QEMU looks for (screen and network card ROMs)
-          mkdir -p "$GITHUB_WORKSPACE/out/qemu-bios"
-          cp pc-bios/efi-*.rom pc-bios/vgabios*.bin "$GITHUB_WORKSPACE/out/qemu-bios/"
-          # the keyboard layout file the screen server needs (made during the build)
-          (cd build && ninja pc-bios/keymaps/en-us) || true
-          mkdir -p "$GITHUB_WORKSPACE/out/qemu-bios/keymaps"
-          K=$(find . -path '*keymaps*' -name en-us -type f | head -1)
-          echo "keymap found at: $K"
-          cp "$K" "$GITHUB_WORKSPACE/out/qemu-bios/keymaps/en-us"
-          find "$GITHUB_WORKSPACE/out/qemu-bios" -type f
-          ls -la "$GITHUB_WORKSPACE/out/qemu-bios"
+          # ---------- 2. Resources (renamed so they cannot clash with Winlator's) ----------
+          tmp = f"{SRC}/_ffres"; shutil.rmtree(tmp, ignore_errors=True); shutil.copytree(f"{ffmain}/res", tmp)
+          for old, new in (("layout/widget.xml", "layout/ff_widget.xml"), ("xml/file_paths.xml", "xml/ff_file_paths.xml"), ("values/v.xml", "values/ff_values.xml")):
+              if os.path.exists(f"{tmp}/{old}"): os.rename(f"{tmp}/{old}", f"{tmp}/{new}")
+          for root, _, files in os.walk(tmp):
+              for fn in files:
+                  if not fn.endswith(".xml"): continue
+                  p = f"{root}/{fn}"; s = rd(p)
+                  s = s.replace('name="app_name"', 'name="ff_app_name"').replace("@string/app_name", "@string/ff_app_name")
+                  s = s.replace('name="ic_bg"', 'name="ff_ic_bg"').replace("@color/ic_bg", "@color/ff_ic_bg")
+                  s = s.replace("@layout/widget", "@layout/ff_widget").replace("@xml/file_paths", "@xml/ff_file_paths")
+                  wr(p, s)
+          shutil.copytree(tmp, f"{main}/res", dirs_exist_ok=True); shutil.rmtree(tmp)
 
-      - name: Crash reporter (prints exactly where the engine crashed, if it does)
-        run: |
-          set -euxo pipefail
-          cat > "$RUNNER_TEMP/sigdbg.c" <<'EOC'
-          #define _GNU_SOURCE
-          #include <signal.h>
-          #include <stdio.h>
-          #include <string.h>
-          #include <stdint.h>
-          #include <unistd.h>
-          #include <fcntl.h>
-          #include <dlfcn.h>
-          #include <ucontext.h>
-          static int pfd[2];
-          static struct sigaction old_act[32];
-          static char mapsbuf[262144];
-          static void put(const char *s) { (void)!write(2, s, strlen(s)); }
-          static int safe_read(void *dst, const void *src, size_t n) {
-            if (write(pfd[1], src, n) != (ssize_t)n) return 0;
-            return read(pfd[0], dst, n) == (ssize_t)n;
+          # ---------- 3. One manifest ----------
+          mp = f"{main}/AndroidManifest.xml"; m = rd(mp); ff = rd(f"{ffmain}/AndroidManifest.xml")
+
+          # 3a. Winlator's own main screen is no longer a launcher icon (it is opened from inside Finite Functions)
+          m, n = re.subn(r'\s*<intent-filter>\s*<action android:name="android.intent.action.MAIN"\s*/>\s*<category android:name="android.intent.category.LAUNCHER"\s*/>\s*</intent-filter>', "", m, count=1)
+          must(n == 1, "could not find Winlator's launcher entry")
+          m, n = re.subn(r'(<activity android:name="com\.winlator\.MainActivity"[^>]*?)android:exported="true"', r'\1android:exported="false"', m, count=1, flags=re.S)
+          must(n == 1, "could not find Winlator's MainActivity")
+
+          # 3b. application tag: Finite Functions' application class, theme, icon and name
+          m, n = re.subn(r"<application\b", '<application android:name="com.finite.functions.App" android:roundIcon="@mipmap/ic_launcher_round" android:theme="@style/Theme.FF" android:allowBackup="true"', m, count=1)
+          must(n == 1, "no <application> tag")
+          m = re.sub(r'\s*android:appCategory="[^"]*"', "", m); m = re.sub(r'\s*android:isGame="[^"]*"', "", m)
+          m = m.replace('android:label="@string/app_name"', 'android:label="@string/ff_app_name"', 1)
+
+          # 3c. permissions Finite Functions needs that Winlator does not already declare
+          have = set(re.findall(r'<uses-permission[^>]*android:name="([^"]+)"', m))
+          extra = ""
+          for tag in re.findall(r"<uses-permission[^>]*/>", ff):
+              nm = re.search(r'android:name="([^"]+)"', tag).group(1)
+              if nm not in have:
+                  extra += "    " + re.sub(r'\s*android:maxSdkVersion="\d+"', "", tag) + "\n"; have.add(nm)
+          m = m.replace("    <application", extra + "    <application", 1) if "    <application" in m else m.replace("<application", extra + "<application", 1)
+
+          # 3d. Finite Functions' components (full class names, unique FileProvider class, renamed resources)
+          inner = re.search(r"<application\b[^>]*>(.*)</application>", ff, re.S); must(inner, "FF manifest has no application block")
+          inner = inner.group(1)
+          inner = re.sub(r'android:name="\.(\w+)"', r'android:name="com.finite.functions.\1"', inner)
+          inner = inner.replace("@string/app_name", "@string/ff_app_name").replace("@xml/file_paths", "@xml/ff_file_paths")
+          inner = inner.replace('android:name="androidx.core.content.FileProvider"', 'android:name="com.finite.functions.FFFileProvider"')
+          m = m.replace("</application>", "\n        <!-- ===== Finite Functions ===== -->\n" + inner + "\n    </application>", 1)
+          wr(mp, m)
+
+          # ---------- 4. Gradle ----------
+          rg = f"{SRC}/build.gradle"; g = rd(rg)
+          cp = "classpath 'com.android.tools.build:gradle:8.4.2'"
+          must(cp in g, "Winlator's root build.gradle changed")
+          g = g.replace(cp, cp + "\n        classpath 'org.jetbrains.kotlin:kotlin-gradle-plugin:2.0.20'\n        classpath 'org.jetbrains.kotlin:compose-compiler-gradle-plugin:2.0.20'", 1)
+          wr(rg, g)
+
+          ag = f"{SRC}/app/build.gradle"; a = rd(ag)
+          must("apply plugin: 'com.android.application'" in a and "compileSdk 35" in a, "Winlator's app build.gradle changed")
+          a = a.replace("apply plugin: 'com.android.application'", "apply plugin: 'com.android.application'\napply plugin: 'org.jetbrains.kotlin.android'\napply plugin: 'org.jetbrains.kotlin.plugin.compose'", 1)
+          a = a.replace("    compileSdk 35\n", """    compileSdk 35
+              buildFeatures { compose true }
+              compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
+              packagingOptions { resources { excludes += ['META-INF/LICENSE*', 'META-INF/NOTICE*', 'META-INF/DEPENDENCIES', 'META-INF/INDEX.LIST', 'META-INF/AL2.0', 'META-INF/LGPL2.1'] } }
+          """, 1)
+          a = a.replace("minifyEnabled true", "minifyEnabled false")   # the shrinker can break Compose and Winlator's native calls
+          dep = "implementation 'androidx.lifecycle:lifecycle-process:2.5.1'"
+          must(dep in a, "Winlator's dependency list changed")
+          a = a.replace(dep, dep + """
+              implementation platform('androidx.compose:compose-bom:2024.09.00')
+              implementation 'androidx.compose.material3:material3'
+              implementation 'androidx.compose.foundation:foundation'
+              implementation 'androidx.activity:activity-compose:1.9.2'
+              implementation 'androidx.media3:media3-exoplayer:1.4.1'
+              implementation 'androidx.media3:media3-session:1.4.1'
+              implementation 'com.google.zxing:core:3.5.3'""", 1)
+          a += """
+
+          tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
+              compilerOptions.jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
           }
-          static void describe(const char *tag, uintptr_t a) {
-            char b[500]; Dl_info d;
-            if (dladdr((void *)a, &d) && d.dli_fname)
-              snprintf(b, sizeof b, " %s %p = %s+0x%lx (%s)\n", tag, (void *)a, d.dli_fname, (unsigned long)(a - (uintptr_t)d.dli_fbase), d.dli_sname ? d.dli_sname : "?");
-            else
-              snprintf(b, sizeof b, " %s %p = (not in a library, maybe generated code)\n", tag, (void *)a);
-            put(b);
-          }
-          static void maps_line(uintptr_t a) {
-            int fd = open("/proc/self/maps", O_RDONLY); if (fd < 0) return;
-            ssize_t n = 0, r; while ((r = read(fd, mapsbuf + n, sizeof(mapsbuf) - 1 - n)) > 0) n += r; mapsbuf[n] = 0; close(fd);
-            char *line = mapsbuf;
-            while (line && *line) {
-              char *nl = strchr(line, '\n'); if (nl) *nl = 0;
-              unsigned long lo, hi;
-              if (sscanf(line, "%lx-%lx", &lo, &hi) == 2 && a >= lo && a < hi) { put(" map: "); put(line); put("\n"); }
-              if (!nl) break; line = nl + 1;
-            }
-          }
-          static void handler(int sig, siginfo_t *si, void *ucv) {
-            ucontext_t *uc = (ucontext_t *)ucv; char b[300];
-            uintptr_t pc = uc->uc_mcontext.pc, lr = uc->uc_mcontext.regs[30], fp = uc->uc_mcontext.regs[29];
-            snprintf(b, sizeof b, "\n*** CRASH REPORT: signal %d, code %d, fault address %p\n sp=%p raw pc=%p raw lr=%p\n", sig, si->si_code, si->si_addr, (void *)uc->uc_mcontext.sp, (void *)pc, (void *)lr);
-            put(b);
-            describe("pc", pc); describe("lr", lr); maps_line(pc);
-            uint32_t ins;
-            if (safe_read(&ins, (void *)pc, 4)) { snprintf(b, sizeof b, " instruction at pc: 0x%08x\n", ins); put(b); } else put(" instruction at pc: not readable\n");
-            put(" call chain:\n");
-            for (int i = 0; i < 24; i++) {
-              uintptr_t fr[2];
-              if (!fp || (fp & 7) || !safe_read(fr, (void *)fp, 16)) break;
-              describe("caller", fr[1]);
-              if (fr[0] <= fp) break; fp = fr[0];
-            }
-            put("*** END OF CRASH REPORT\n");
-            sigaction(sig, &old_act[sig], NULL);
-          }
-          __attribute__((constructor)) static void init(void) {
-            if (pipe(pfd) == 0) { fcntl(pfd[0], F_SETFL, O_NONBLOCK); fcntl(pfd[1], F_SETFL, O_NONBLOCK); }
-            struct sigaction sa; memset(&sa, 0, sizeof sa); sa.sa_sigaction = handler; sa.sa_flags = SA_SIGINFO; sigemptyset(&sa.sa_mask);
-            int sigs[] = { SIGILL, SIGSEGV, SIGBUS, SIGABRT, SIGTRAP, SIGFPE };
-            for (unsigned i = 0; i < sizeof sigs / sizeof sigs[0]; i++) sigaction(sigs[i], &sa, &old_act[sigs[i]]);
-          }
-          EOC
-          "$TC/aarch64-linux-android${API}-clang" -shared -fPIC -O1 -Wl,-z,max-page-size=16384 -o "$GITHUB_WORKSPACE/out/libsigdbg.so" "$RUNNER_TEMP/sigdbg.c" -ldl
-          ls -l "$GITHUB_WORKSPACE/out/libsigdbg.so"
+          """
+          wr(ag, a)
+          print("merge ok")
+          PYEOF
+          python3 merge_ff.py src ff/FiniteFunctions 2>&1 | tee merge.log
 
-      - name: Save the results
-        if: always()
+      - name: Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Android SDK pieces Winlator asks for
+        run: |
+          set -x
+          SDKM=$(ls "$ANDROID_HOME"/cmdline-tools/*/bin/sdkmanager | head -1)
+          yes | "$SDKM" --licenses > /dev/null || true
+          "$SDKM" "ndk;24.0.8215888" "cmake;3.22.1" "platforms;android-35" "build-tools;34.0.0"
+
+      - name: Build the app
+        working-directory: src
+        run: |
+          set -o pipefail
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon --stacktrace -Dorg.gradle.jvmargs=-Xmx4g 2>&1 | tee "$GITHUB_WORKSPACE/build.log"
+
+      - name: Collect the APK
+        run: |
+          APK=$(find src/app/build/outputs/apk -name '*.apk' | head -1)
+          echo "APK=$APK"
+          mkdir -p out
+          cp "$APK" out/finite-functions.apk
+          ls -l out
+
+      - name: Keep the APK as a workflow artifact
         uses: actions/upload-artifact@v4
         with:
-          name: finite-qemu
-          if-no-files-found: warn
-          path: |
-            out/libqemu.so
-            out/edk2-aarch64-code.fd
-            out/libsigdbg.so
-            out/qemu-bios
-            configure.log
-            build.log
-            config.log
+          name: finite-functions-apk
+          path: out/finite-functions.apk
+
+      - name: Publish the APK as a Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="finite-win-$(date +%Y%m%d-%H%M)"
+          gh release create "$TAG" out/finite-functions.apk --repo "$GITHUB_REPOSITORY" --title "Finite Functions + Windows $TAG" --notes "One app: Finite Functions with Winlator inside (Tools tab, Windows apps). Built by GitHub Actions."
+
+      - name: Write a short report to the ci-log branch
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          JOB_STATUS: ${{ job.status }}
+        run: |
+          {
+            echo "status: $JOB_STATUS"
+            echo "run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+            echo
+            echo "=== merge step ==="
+            head -30 merge.log 2>/dev/null
+            echo
+            echo "=== error lines in the build ==="
+            grep -n -E "error:|^e: |FAILED|What went wrong|Execution failed|Could not|Duplicate|AAPT" build.log 2>/dev/null | head -50
+            echo
+            echo "=== last 80 lines of the build ==="
+            tail -n 80 build.log 2>/dev/null
+          } > report.txt
+          gh api "repos/$GITHUB_REPOSITORY/git/refs" -f ref="refs/heads/ci-log" -f sha="$GITHUB_SHA" > /dev/null 2>&1 || true
+          OLD=$(gh api "repos/$GITHUB_REPOSITORY/contents/ci/last-build.txt?ref=ci-log" --jq .sha 2>/dev/null || true)
+          if [ -n "$OLD" ]; then
+            gh api -X PUT "repos/$GITHUB_REPOSITORY/contents/ci/last-build.txt" -f message="build report" -f branch="ci-log" -f content="$(base64 -w0 report.txt)" -f sha="$OLD"
+          else
+            gh api -X PUT "repos/$GITHUB_REPOSITORY/contents/ci/last-build.txt" -f message="build report" -f branch="ci-log" -f content="$(base64 -w0 report.txt)"
+          fi
 
