@@ -164,6 +164,13 @@ jobs:
           PYEOF
           python3 merge_ff.py src ff/FiniteFunctions 2>&1 | tee merge.log
 
+      - name: Package the merged project so you can open it in Android Studio
+        run: |
+          mkdir -p out
+          cd src
+          zip -qr ../out/finite-functions-android-studio-project.zip . -x '.git/*' '*/.git/*' '.gradle/*' 'build/*' 'app/build/*'
+          ls -lh ../out
+
       - name: Java 17
         uses: actions/setup-java@v4
         with:
@@ -198,12 +205,18 @@ jobs:
           name: finite-functions-apk
           path: out/finite-functions.apk
 
+      - name: Keep the Android Studio project as a workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: finite-functions-android-studio-project
+          path: out/finite-functions-android-studio-project.zip
+
       - name: Publish the APK as a Release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           TAG="finite-win-$(date +%Y%m%d-%H%M)"
-          gh release create "$TAG" out/finite-functions.apk --repo "$GITHUB_REPOSITORY" --title "Finite Functions + Windows $TAG" --notes "One app: Finite Functions with Winlator inside (Tools tab, Windows apps). Built by GitHub Actions."
+          gh release create "$TAG" out/finite-functions.apk out/finite-functions-android-studio-project.zip --repo "$GITHUB_REPOSITORY" --title "Finite Functions + Windows $TAG" --notes "One app: Finite Functions with Winlator inside (Tools tab, Windows apps). Files: finite-functions.apk, and finite-functions-android-studio-project.zip (the merged project to open in Android Studio)."
 
       - name: Write a short report to the ci-log branch
         if: always()
