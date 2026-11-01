@@ -1,5 +1,5 @@
 status: success
-run: https://github.com/BLACK-DRAGON82693/qemu-build/actions/runs/41264950269
+run: https://github.com/BLACK-DRAGON82693/qemu-build/actions/runs/41266581569
 
 === merge step ===
 merge ok
@@ -64,8 +64,8 @@ Note: Recompile with -Xlint:unchecked for details.
 > Task :app:mergeDebugGlobalSynthetics
 > Task :app:processDebugJavaRes
 > Task :app:mergeDebugJniLibFolders
-> Task :app:mergeDebugNativeLibs
 > Task :app:mergeProjectDexDebug
+> Task :app:mergeDebugNativeLibs
 > Task :app:mergeDebugJavaResource
 > Task :app:validateSigningDebug
 > Task :app:writeDebugAppMetadata
@@ -86,5 +86,5 @@ You can use '--warning-mode all' to show the individual deprecation warnings and
 
 For more on this, please refer to https://docs.gradle.org/8.14.5/userguide/command_line_interface.html#sec:command_line_warnings in the Gradle documentation.
 
-BUILD SUCCESSFUL in 2m 40s
+BUILD SUCCESSFUL in 2m 27s
 37 actionable tasks: 37 executed
